@@ -1,7 +1,7 @@
 {
   "name": "opencode-conductor",
-  "version": "0.1.1",
-  "description": "Persistent project-state, blocking-decision and single-worker orchestration for OpenCode.",
+  "version": "0.2.0",
+  "description": "Persistent project-state, blocking-decision, model-routing and single-worker orchestration for OpenCode.",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -34,6 +34,7 @@
     "opencode",
     "orchestration",
     "task-management",
+    "model-routing",
     "decision-gates",
     "subagent"
   ],
