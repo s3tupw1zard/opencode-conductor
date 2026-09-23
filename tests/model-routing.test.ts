@@ -43,31 +43,33 @@ describe("model routing", () => {
     expect(nextTier("strong")).toBe("strong")
   })
 
-  test("filters unavailable or tool-less models from setup", () => {
-    const models = normalizeAvailableModels([
-      {
-        providerID: "openai",
-        id: "small",
-        name: "Small",
-        enabled: true,
-        capabilities: { tools: true },
-        cost: [{ input: 0.1, output: 0.5, cache: { read: 0, write: 0 } }],
-      },
-      {
-        providerID: "demo",
-        id: "disabled",
-        name: "Disabled",
-        enabled: false,
-        capabilities: { tools: true },
-      },
-      {
-        providerID: "demo",
-        id: "no-tools",
-        name: "No Tools",
-        enabled: true,
-        capabilities: { tools: false },
-      },
-    ])
+  test("normalizes OpenCode's structured list result and filters unavailable models", () => {
+    const models = normalizeAvailableModels({
+      data: [
+        {
+          providerID: "openai",
+          id: "small",
+          name: "Small",
+          enabled: true,
+          capabilities: { tools: true },
+          cost: [{ input: 0.1, output: 0.5, cache: { read: 0, write: 0 } }],
+        },
+        {
+          providerID: "demo",
+          id: "disabled",
+          name: "Disabled",
+          enabled: false,
+          capabilities: { tools: true },
+        },
+        {
+          providerID: "demo",
+          id: "no-tools",
+          name: "No Tools",
+          enabled: true,
+          capabilities: { tools: false },
+        },
+      ],
+    })
 
     expect(models).toHaveLength(1)
     expect(models[0]?.id).toBe("small")
