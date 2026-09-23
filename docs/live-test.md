@@ -34,14 +34,13 @@ Expected before normal project work continues:
 - `.conductor/` appears after the meaningful root prompt.
 - `config.json` initially contains the model active for the first turn as the bootstrap value for `economy`, `balanced`, and `strong`.
 - `model_routing.setup_state` is initially `pending`.
-- OpenCode's native `question` form asks exactly once per project for Economy, Balanced, and Strong.
+- OpenCode's native `question` form asks exactly once per project for tabs headed exactly `Economy`, `Balanced`, and `Strong`.
 - Choices come from the locally available, enabled, tool-capable OpenCode model list.
 - Free/custom input remains available through OpenCode's native question UI.
-- After submission, the exact chosen `{providerID,id}` values are stored in `config.json`, each profile has `source: "user"`, and `setup_state` becomes `configured`.
+- After submission, the Conductor runtime itself parses the native answers and stores the exact chosen `{providerID,id}` values in `config.json`.
+- Each stored profile has `source: "user"`, `setup_state` becomes `configured`, and the root switches to the selected Economy model without needing a manual config edit by the model.
 
 For a useful live test choose three visibly different models if available. If only one suitable model is installed, selecting the same model for every tier is valid but cannot prove switching.
-
-After setup, the root should use the configured `economy` model on normal turns.
 
 ## 4. Product decision gate
 
@@ -89,9 +88,15 @@ At delegation time Conductor should persist an `execution` object similar to:
 
 For an existing child resume, changing the task's explicit `execution.model_tier` and resuming the same `task_id` should switch that same child session rather than creating a replacement.
 
-## 6. Escalation test
+## 6. Evidence-based escalation test
 
-Only perform this deliberately if you can cause the worker call itself to fail safely.
+Do not expect an arbitrary worker/tool failure to consume a stronger tier. That is intentionally disabled.
+
+To exercise escalation, make a worker return a line such as:
+
+```text
+CONDUCTOR_ESCALATION_REQUEST: task requires capability beyond the assigned model tier because <concrete evidence>
+```
 
 Expected:
 
@@ -99,9 +104,9 @@ Expected:
 economy -> balanced -> strong
 ```
 
-one step per failed worker execution, never beyond `strong`.
+one step per explicit, evidence-bearing escalation request, never beyond `strong`.
 
-The task should record `escalated_from`, `escalated_at`, and a routing reason. A normal failed unit test inside an otherwise successful worker result should not automatically consume strong-tier quota solely because a test failed once.
+The task should record `escalated_from`, `escalated_at`, and the supplied evidence in its routing reason. Syntax errors, one failed unit test, a temporary tool/network error, or a raw worker tool failure without the marker must leave the tier unchanged.
 
 ## 7. Direct task sidebar
 
@@ -207,4 +212,4 @@ Expected: perform the tiny edit without creating a large orchestration plan. The
 
 The feature is usable when this full cycle works reliably:
 
-**project init → local-model tier selection → economy root → task classification → correct worker tier → worker question → root native form → same worker resume → persistent routed state → direct sidebar → clean restart without repeated setup**.
+**project init → local-model tier selection → runtime persists answers → economy root → task classification → correct worker tier → worker question → root native form → same worker resume → persistent routed state → direct sidebar → clean restart without repeated setup**.
