@@ -157,6 +157,10 @@ export function normalizeAvailableModels(input: unknown): AvailableModel[] {
     .sort((a, b) => `${a.providerID}/${a.name}`.localeCompare(`${b.providerID}/${b.name}`))
 }
 
+export function modelChoiceLabel(model: Pick<AvailableModel, "providerID" | "id" | "name">): string {
+  return `${model.name} (${model.providerID}/${model.id})`
+}
+
 export function modelSelectionInstructions(models: AvailableModel[], currentModel?: unknown): string {
   const current = normalizeModelRef(currentModel)
   const options = models.length
@@ -167,10 +171,10 @@ export function modelSelectionInstructions(models: AvailableModel[], currentMode
               ? ` — $${model.inputCost}/$${model.outputCost} input/output per 1M`
               : ""
           const currentMarker = current && current.providerID === model.providerID && current.id === model.id ? " [current]" : ""
-          return `- ${model.name} (${model.providerID}/${model.id})${currentMarker}${costs}`
+          return `- ${modelChoiceLabel(model)}${currentMarker}${costs}`
         })
         .join("\n")
-    : "- No enabled tool-capable models could be enumerated; keep the bootstrap model for all tiers."
+    : "- No enabled tool-capable models could be enumerated; use the current bootstrap model."
 
   return `CONDUCTOR MODEL ROUTING SETUP IS PENDING.
 Before continuing normal project planning or implementation, configure the three project-local model tiers with OpenCode's native question tool.
@@ -178,12 +182,18 @@ Before continuing normal project planning or implementation, configure the three
 Available enabled tool-capable models from this OpenCode installation:
 ${options}
 
-Ask exactly three single-select questions in one native question form:
-1. Economy — routine orchestration, status, tiny edits and low-risk work. Prefer the cheapest model that is still reliable for tool use.
-2. Balanced — normal implementation, analysis, debugging, research and verification. Prefer a capable model without spending strong-tier quota unnecessarily.
-3. Strong — architecture, high-complexity work, high-risk changes and evidence-based escalation.
+Call question once with exactly THREE single-select questions. Their headers MUST be exactly:
+1. Economy
+2. Balanced
+3. Strong
 
-Use the complete locally available model list above as the selectable choices. The current model is only a safe bootstrap default, not a recommendation that all three tiers remain identical.
-After the user submits the form, update .conductor/config.json model_routing.profiles with the exact selected {providerID,id} values, set each profile source to "user", and set model_routing.setup_state to "configured". Do not continue dependent project work until that write is complete.
-The same model may be selected for multiple tiers if the user wants that.`
+For each question, use the complete model list above as options. Each option label MUST use exactly this shape: "Display Name (providerID/modelID)". Do not append recommendation text to the option label; consequences may go in the option description.
+
+Tier meanings:
+- Economy — routine orchestration, status, tiny edits and low-risk work. Prefer the cheapest model that is still reliable for tool use.
+- Balanced — normal implementation, analysis, debugging, research and verification. Prefer a capable model without spending strong-tier quota unnecessarily.
+- Strong — architecture, high-complexity work, high-risk changes and evidence-based escalation.
+
+The current model is only a safe bootstrap default, not a recommendation that all three tiers remain identical. The same model may be selected for multiple tiers.
+After the native question is answered, the Conductor runtime persists the selected model references and changes setup_state to configured automatically. Do NOT manually edit model_routing for this setup unless the runtime reports that it could not parse an answer. Wait for the question result before doing any dependent project work.`
 }
