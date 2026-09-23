@@ -6,20 +6,17 @@ It keeps project/task/decision state outside chat history while preserving one s
 
 ## Why OpenCode
 
-Conductor's blocking-decision flow maps directly to OpenCode's built-in `question` tool. The tool pauses execution, presents interactive options in the active session, supports multiple questions in one form, and always permits a custom answer. Child sessions can have both `question` and `subagent` removed from their model-visible tool set.
-
-That gives Conductor a cleaner human-in-the-loop contract than trying to route queued async questions between hidden agent surfaces.
+Conductor's blocking-decision flow maps directly to OpenCode's built-in `question` tool. The tool pauses execution, presents interactive options in the active session, supports multiple questions in one form, and always permits a custom answer. Child sessions can have both `question` and delegation tools removed from their model-visible tool set.
 
 ## Runtime model
 
 - Root session owns user interaction and `.conductor/`.
-- Straightforward work stays in the root.
+- Straightforward low-risk work stays in the root.
 - Complex bounded work may use exactly one foreground child session.
-- A child cannot use `question` and cannot launch another child.
+- A child cannot ask the user questions and cannot launch another child.
 - If the worker needs a user decision it returns `CONDUCTOR_USER_QUESTION` to the root.
 - Root opens OpenCode's native `question` form, stores the answer, and resumes the same child session when useful.
-
-No model is hardcoded. The user's selected OpenCode model remains the root model; a configured subagent may use its own model, otherwise OpenCode inherits the parent model.
+- Model routing uses project-local `economy`, `balanced`, and `strong` tiers and always prefers the lowest sufficient tier.
 
 ## Persistent state
 
@@ -34,13 +31,72 @@ The first meaningful root-session prompt creates:
 └── config.json
 ```
 
-This state contract intentionally remains close to Codex Conductor so project skills can share the same concepts.
+The selected model that is active when the project is first initialized is written as the safe bootstrap model for all three routing tiers. Conductor then asks once per project which locally available OpenCode model should be used for each tier.
+
+## Model routing
+
+Conductor 0.2 introduces project-local automatic model routing.
+
+The default policy is:
+
+```text
+economy
+  root orchestration, status, tiny edits, routine docs, low-risk work
+
+balanced
+  normal implementation, analysis, debugging, research, verification
+
+strong
+  high/very-high complexity, high/critical risk, significant architecture,
+  or evidence-based escalation
+```
+
+The first project run uses OpenCode's locally available, enabled, tool-capable model list and opens one native question form for:
+
+1. Economy model
+2. Balanced model
+3. Strong model
+
+The same model may be selected for multiple tiers. Until that setup is submitted, the current model remains the safe fallback for all tiers.
+
+Selections are stored in `.conductor/config.json`:
+
+```json
+{
+  "model_routing": {
+    "enabled": true,
+    "strategy": "lowest_sufficient",
+    "setup_state": "configured",
+    "root_tier": "economy",
+    "profiles": {
+      "economy": {
+        "model": { "providerID": "provider", "id": "model-a" },
+        "source": "user"
+      },
+      "balanced": {
+        "model": { "providerID": "provider", "id": "model-b" },
+        "source": "user"
+      },
+      "strong": {
+        "model": { "providerID": "provider", "id": "model-c" },
+        "source": "user"
+      }
+    }
+  }
+}
+```
+
+Tracked tasks should include `task_class`, `complexity`, and `risk`. Conductor derives the worker tier at delegation time and persists the selected tier and routing reason in the task's `execution` object. Explicit `execution.model_tier` remains available as an override.
+
+The root is switched to the configured `economy` model on normal project turns after setup. Before a worker starts, Conductor resolves the current task and switches the child session to the configured tier model. Resuming an existing child can switch that same worker to a newly selected tier without discarding its context.
+
+If a worker execution actually fails, Conductor records at most a one-step escalation (`economy → balanced → strong`) for the next retry. Strong-tier quota should not be spent merely because a test fails once or a syntax error occurs; the root policy requires evidence that the previous tier was insufficient before treating escalation as a capability decision.
 
 ## Task sidebar
 
 `.conductor/tasks.json` is the single source of truth for project tasks. Conductor does **not** mirror those tasks through OpenCode's `todowrite` tool or keep a second session todo list.
 
-The package ships a separate TUI entrypoint that reads `tasks.json` directly and renders the current Conductor graph in OpenCode's normal sidebar content area. The view refreshes on OpenCode file-edit/file-watcher events and works across sessions because the source is project state, not session state.
+The package ships a separate TUI entrypoint that reads `tasks.json` directly and renders the current Conductor graph in OpenCode's normal sidebar content area.
 
 Status mapping:
 
@@ -81,7 +137,7 @@ Conductor asks at most two substantive questions in one batch when possible and 
 
 ## Worker handoff
 
-A worker is injected with a dedicated contract and has `question` and `subagent` removed from its context before model dispatch. A permission hook also denies those actions as defense in depth.
+A worker is injected with a dedicated contract and has user-question and recursive-delegation tools removed from its context before model dispatch. A permission hook also denies those actions as defense in depth.
 
 If input is required, the worker returns something like:
 
@@ -102,16 +158,16 @@ The root then owns the interactive question and may continue the same worker usi
 
 ## Installation
 
-The current development build targets OpenCode V2 and lives on `feat/initial-conductor-runtime` until the initial PR is merged:
-
-```bash
-opencode plugin add github:s3tupw1zard/opencode-conductor#feat/initial-conductor-runtime
-```
-
-After the initial runtime lands on `main`, the stable Git install becomes:
+Install the current main branch:
 
 ```bash
 opencode plugin add github:s3tupw1zard/opencode-conductor
+```
+
+For this development branch while PR #2 is open:
+
+```bash
+opencode plugin add github:s3tupw1zard/opencode-conductor#feat/model-routing
 ```
 
 The package exposes separate `./server` and `./tui` entrypoints, so one plugin install can activate the orchestration runtime and the Conductor sidebar without duplicating task state.
@@ -122,8 +178,6 @@ Check installed plugins with:
 opencode plugin list
 opencode plugin check
 ```
-
-For a project-local development checkout you can instead reference the package from OpenCode's plugin configuration.
 
 ## Development
 
@@ -137,8 +191,10 @@ See [`docs/live-test.md`](docs/live-test.md) for the acceptance test.
 
 ## Current status
 
-`0.1.1` adds the direct Conductor task sidebar on top of the initial OpenCode port. The live acceptance target is:
+`0.2.0` adds project-local model profiles, first-use interactive model setup, task complexity/risk routing, economy-root switching, worker model switching, same-worker tier changes and evidence-based escalation.
 
-**root → one worker → worker needs decision → root native question UI → user answer → same worker resumes → persistent state updated → task graph visible directly in the OpenCode sidebar**.
+The live acceptance target is:
+
+**project init → choose economy/balanced/strong from local models → economy root → task classified → correctly tiered worker → worker question → root native question UI → same worker resumes → persistent state updated → task graph visible directly in the OpenCode sidebar**.
 
 Codex Conductor remains a separate project; this repository does not replace or modify it.
