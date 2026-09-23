@@ -16,9 +16,12 @@ import {
 import {
   modelSelectionInstructions,
   normalizeAvailableModels,
+  normalizeModelRef,
+  type AvailableModel,
   type ModelTier,
   type RoutingModelRef,
 } from "./model-routing.js"
+import { persistModelSetup } from "./model-setup.js"
 
 const ROOT_POLICY = `OpenCode Conductor is active.
 
@@ -149,6 +152,22 @@ function escalationEvidence(result: unknown): string | null {
   return match?.[1]?.trim() || null
 }
 
+function includeCurrentModel(models: AvailableModel[], currentModel: unknown): AvailableModel[] {
+  const current = normalizeModelRef(currentModel)
+  if (!current) return models
+  if (models.some((model) => model.providerID === current.providerID && model.id === current.id)) return models
+  return [
+    ...models,
+    {
+      providerID: current.providerID,
+      id: current.id,
+      name: `${current.providerID}/${current.id}`,
+      enabled: true,
+      toolCapable: true,
+    },
+  ]
+}
+
 export default Plugin.define({
   id: "opencode-conductor",
 
@@ -214,7 +233,7 @@ export default Plugin.define({
       if (await hasConductorState(root)) {
         const routing = await getModelRoutingConfig(root)
         if (routing.enabled && routing.setup_state === "pending") {
-          const available = normalizeAvailableModels(await ctx.model.list())
+          const available = includeCurrentModel(normalizeAvailableModels(await ctx.model.list()), event.model)
           setup = `\n\n${modelSelectionInstructions(available, event.model)}`
         }
       }
@@ -254,10 +273,24 @@ export default Plugin.define({
     })
 
     await ctx.tool.hook("execute.after", async (event) => {
-      if (!isWorkerTool(event.tool)) return
       const session = await sessionInfo(ctx, event.sessionID)
       if (session.parentID || !(await hasConductorState(root))) return
 
+      if (event.tool === "question") {
+        if (event.status !== "completed") return
+        const routing = await getModelRoutingConfig(root)
+        if (!routing.enabled || routing.setup_state !== "pending") return
+        const currentSession = await ctx.session.get({ sessionID: event.sessionID })
+        const currentModel = (currentSession as any).model
+        const available = includeCurrentModel(normalizeAvailableModels(await ctx.model.list()), currentModel)
+        const selections = await persistModelSetup(root, event.input, event.result, available)
+        if (selections) {
+          await ctx.session.switchModel({ sessionID: event.sessionID, model: selections.economy as any })
+        }
+        return
+      }
+
+      if (!isWorkerTool(event.tool)) return
       pendingWorkerRoute.delete(event.sessionID)
       if (event.status !== "completed") return
 
