@@ -57,7 +57,7 @@ The first project run uses OpenCode's locally available, enabled, tool-capable m
 2. Balanced model
 3. Strong model
 
-The same model may be selected for multiple tiers. Until that setup is submitted, the current model remains the safe fallback for all tiers.
+The same model may be selected for multiple tiers. Until that setup is submitted, the current model remains the safe fallback for all tiers. The Conductor runtime reads the native `question` result itself and persists all three exact model references; the root model does not have to manually translate the user's choices into configuration.
 
 Selections are stored in `.conductor/config.json`:
 
@@ -90,7 +90,7 @@ Tracked tasks should include `task_class`, `complexity`, and `risk`. Conductor d
 
 The root is switched to the configured `economy` model on normal project turns after setup. Before a worker starts, Conductor resolves the current task and switches the child session to the configured tier model. Resuming an existing child can switch that same worker to a newly selected tier without discarding its context.
 
-If a worker execution actually fails, Conductor records at most a one-step escalation (`economy → balanced → strong`) for the next retry. Strong-tier quota should not be spent merely because a test fails once or a syntax error occurs; the root policy requires evidence that the previous tier was insufficient before treating escalation as a capability decision.
+Escalation is deliberately conservative. A generic worker-tool error does **not** spend a stronger tier automatically. A worker must return a `CONDUCTOR_ESCALATION_REQUEST:` line with concrete evidence that its assigned tier is insufficient. Only then does Conductor record a one-step escalation (`economy → balanced → strong`) for the next retry. Ordinary syntax errors, one failed test, temporary tool/network failures, or tedious work are not escalation evidence.
 
 ## Task sidebar
 
