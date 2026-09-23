@@ -12,6 +12,7 @@ const ROOT_POLICY = `OpenCode Conductor is active.
 Root-session contract:
 - This root session is the user's only conversational interface. Never require the user to enter a child session.
 - Treat .conductor/ as durable project state. Keep meaningful tasks, dependencies, decisions, current phase, and worker resume information synchronized.
+- .conductor/tasks.json is the single source of truth for project tasks. OpenCode's native todowrite/todoread tools are intentionally unavailable while Conductor is active; the TUI projects tasks.json directly into the normal sidebar area instead of maintaining a second todo list.
 - Do not create task records for trivial conversation or tiny edits that do not benefit from tracking.
 - Perform straightforward low-risk work in the root session.
 - Use at most ONE worker child session at a time and only when bounded complex work benefits from isolated focus.
@@ -44,6 +45,7 @@ Worker contract:
 - Work only on the delegated task and necessary technical prerequisites.
 - You do not own user interaction. The question tool is intentionally unavailable in this child session.
 - You cannot launch subagents. The subagent tool is intentionally unavailable in this child session.
+- Native todowrite/todoread are intentionally unavailable. Do not create a second task list; report progress to the root for integration into .conductor/tasks.json.
 - Never edit .conductor/. The root session owns persistent orchestration state.
 - Do not make product, preference, scope, approval, or requirement decisions for the user.
 - Technical implementation choices inside already-approved scope are allowed; report important ones to the root.
@@ -79,6 +81,11 @@ async function sessionInfo(ctx: any, sessionID: string): Promise<SessionInfoLike
   return (await ctx.session.get({ sessionID })) as SessionInfoLike
 }
 
+function removeNativeTodoTools(tools: Record<string, unknown>): void {
+  delete tools.todowrite
+  delete tools.todoread
+}
+
 export default Plugin.define({
   id: "opencode-conductor",
 
@@ -96,6 +103,7 @@ export default Plugin.define({
 
     await ctx.session.hook("context", async (event) => {
       const session = await sessionInfo(ctx, event.sessionID)
+      removeNativeTodoTools(event.tools)
 
       if (session.parentID) {
         // This is deliberately stronger than prompting the worker not to ask:
@@ -117,9 +125,9 @@ export default Plugin.define({
       const session = await sessionInfo(ctx, event.sessionID)
       if (!session.parentID) return
 
-      if (event.action === "question" || event.action === "subagent") {
+      if (event.action === "question" || event.action === "subagent" || event.action === "todowrite") {
         event.effect = "deny"
-        event.message = "OpenCode Conductor routes all user interaction and delegation through the root session."
+        event.message = "OpenCode Conductor routes user interaction, delegation, and task state through the root session."
         return
       }
 
