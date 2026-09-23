@@ -43,8 +43,8 @@ Model routing:
 - balanced is the default for normal implementation, analysis, debugging, research and verification.
 - strong is reserved for high/very-high complexity, high/critical risk, significant architecture, or evidence-based escalation.
 - Do not spend strong-tier quota merely because it exists. Prefer the smallest tier sufficient for the task.
-- If a worker fails because the selected tier is demonstrably insufficient, Conductor records a one-step escalation for the next retry. Resume the same worker when practical rather than discarding its context.
-- Do not escalate for ordinary syntax errors, a single failed test, or a typo unless those failures demonstrate a capability/complexity mismatch.
+- A worker may request one-step escalation only by returning CONDUCTOR_ESCALATION_REQUEST with concrete evidence that its assigned tier is insufficient. Conductor does not escalate merely because the worker tool errored, a syntax error occurred, or one test failed.
+- Resume the same worker when practical after a tier change rather than discarding its context.
 
 Blocking decisions:
 - Never guess a product decision, preference, requirement, approval, or scope choice that can materially change the result.
@@ -75,7 +75,7 @@ Worker contract:
 - Do not make product, preference, scope, approval, or requirement decisions for the user.
 - Technical implementation choices inside already-approved scope are allowed; report important ones to the root.
 - If user input is required, stop at a safe boundary. Do not continue dependent work. Return a structured CONDUCTOR_USER_QUESTION to the root.
-- If the assigned model tier is genuinely insufficient for the task, state that clearly in the result with concrete evidence. Do not request a stronger model merely because the task is tedious.
+- If the assigned model tier is genuinely insufficient for the task, return exactly one line beginning CONDUCTOR_ESCALATION_REQUEST: followed by concrete evidence. Use this only for a demonstrated capability/complexity mismatch, not for ordinary syntax errors, a single failed test, temporary tool/network failure, or merely tedious work.
 
 Preferred final handoff:
 CONDUCTOR_RESULT
@@ -127,6 +127,26 @@ function taskIDFromInput(input: unknown): string | undefined {
   if (!input || typeof input !== "object") return undefined
   const taskID = (input as Record<string, unknown>).task_id
   return typeof taskID === "string" && taskID ? taskID : undefined
+}
+
+function resultText(result: unknown): string {
+  if (!result || typeof result !== "object") return ""
+  const record = result as Record<string, unknown>
+  if (typeof record.content === "string") return record.content
+  if (Array.isArray(record.content)) {
+    return record.content
+      .filter((item): item is { type: string; text?: string } => !!item && typeof item === "object" && "type" in item)
+      .filter((item) => item.type === "text" && typeof item.text === "string")
+      .map((item) => item.text)
+      .join("\n")
+  }
+  return typeof record.output === "string" ? record.output : ""
+}
+
+function escalationEvidence(result: unknown): string | null {
+  const text = resultText(result)
+  const match = text.match(/^CONDUCTOR_ESCALATION_REQUEST:\s*(.+)$/im)
+  return match?.[1]?.trim() || null
 }
 
 export default Plugin.define({
@@ -194,7 +214,7 @@ export default Plugin.define({
       if (await hasConductorState(root)) {
         const routing = await getModelRoutingConfig(root)
         if (routing.enabled && routing.setup_state === "pending") {
-          const available = normalizeAvailableModels((await ctx.model.list()) as readonly unknown[])
+          const available = normalizeAvailableModels(await ctx.model.list())
           setup = `\n\n${modelSelectionInstructions(available, event.model)}`
         }
       }
@@ -238,10 +258,11 @@ export default Plugin.define({
       const session = await sessionInfo(ctx, event.sessionID)
       if (session.parentID || !(await hasConductorState(root))) return
 
-      if (event.status === "error") {
-        await escalateCurrentTaskRouting(root, `${event.tool} worker execution failed`)
-        pendingWorkerRoute.delete(event.sessionID)
-      }
+      pendingWorkerRoute.delete(event.sessionID)
+      if (event.status !== "completed") return
+
+      const evidence = escalationEvidence(event.result)
+      if (evidence) await escalateCurrentTaskRouting(root, evidence)
     })
 
     await ctx.permission.hook("evaluate", async (event) => {
