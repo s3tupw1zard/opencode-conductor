@@ -4,6 +4,7 @@ import {
   ensureModelRoutingConfig,
   escalateCurrentTaskRouting,
   getModelRoutingConfig,
+  hasConductorState,
   modelForTier,
   projectSnapshot,
   resolveCurrentTaskRouting,
@@ -15,7 +16,6 @@ import {
 import {
   modelSelectionInstructions,
   normalizeAvailableModels,
-  normalizeModelRef,
   type ModelTier,
   type RoutingModelRef,
 } from "./model-routing.js"
@@ -156,6 +156,7 @@ export default Plugin.define({
         return
       }
 
+      if (!(await hasConductorState(root))) return
       const routing = await getModelRoutingConfig(root)
       if (routing.enabled && routing.setup_state === "configured") {
         const rootModel = await modelForTier(root, routing.root_tier ?? "economy")
@@ -183,18 +184,19 @@ export default Plugin.define({
       if (pendingProjectInit.has(event.sessionID)) {
         await ensureMinimalState(root, event.model)
         pendingProjectInit.delete(event.sessionID)
-      } else {
-        await ensureMinimalState(root, event.model)
+      } else if (await hasConductorState(root)) {
         await ensureModelRoutingConfig(root, event.model)
       }
 
-      const routing = await getModelRoutingConfig(root)
       const snapshot = await projectSnapshot(root)
       let setup = ""
 
-      if (routing.enabled && routing.setup_state === "pending") {
-        const available = normalizeAvailableModels((await ctx.model.list()) as readonly unknown[])
-        setup = `\n\n${modelSelectionInstructions(available, event.model)}`
+      if (await hasConductorState(root)) {
+        const routing = await getModelRoutingConfig(root)
+        if (routing.enabled && routing.setup_state === "pending") {
+          const available = normalizeAvailableModels((await ctx.model.list()) as readonly unknown[])
+          setup = `\n\n${modelSelectionInstructions(available, event.model)}`
+        }
       }
 
       event.system.push({
@@ -206,7 +208,7 @@ export default Plugin.define({
     await ctx.tool.hook("execute.before", async (event) => {
       if (!isWorkerTool(event.tool)) return
       const session = await sessionInfo(ctx, event.sessionID)
-      if (session.parentID) return
+      if (session.parentID || !(await hasConductorState(root))) return
 
       const routing = await getModelRoutingConfig(root)
       if (!routing.enabled || routing.setup_state !== "configured") return
@@ -234,7 +236,7 @@ export default Plugin.define({
     await ctx.tool.hook("execute.after", async (event) => {
       if (!isWorkerTool(event.tool)) return
       const session = await sessionInfo(ctx, event.sessionID)
-      if (session.parentID) return
+      if (session.parentID || !(await hasConductorState(root))) return
 
       if (event.status === "error") {
         await escalateCurrentTaskRouting(root, `${event.tool} worker execution failed`)
