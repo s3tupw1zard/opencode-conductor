@@ -1,29 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { Plugin } from "@opencode/plugin/tui"
 import { For, Show, createMemo, createSignal } from "solid-js"
-import {
-  isConductorTasksPath,
-  loadConductorTasks,
-  resolveProjectRoot,
-  sidebarTasks,
-  type ConductorTask,
-} from "./task-view.js"
-
-function eventFile(details: unknown): string | undefined {
-  if (!details || typeof details !== "object") return undefined
-  const record = details as Record<string, unknown>
-  const data = record.data
-  if (data && typeof data === "object") {
-    const file = (data as Record<string, unknown>).file
-    if (typeof file === "string") return file
-  }
-  const properties = record.properties
-  if (properties && typeof properties === "object") {
-    const file = (properties as Record<string, unknown>).file
-    if (typeof file === "string") return file
-  }
-  return undefined
-}
+import { loadConductorTasks, sidebarTasks, type ConductorTask } from "./task-view.js"
 
 function TaskPanel(props: { tasks: () => ConductorTask[] }) {
   const projected = createMemo(() => sidebarTasks(props.tasks()))
@@ -79,10 +57,7 @@ export default Plugin.define({
 
   async setup(context) {
     const location = context.location ?? context.data.location.default()
-    const root = resolveProjectRoot({
-      worktree: location?.project?.directory,
-      directory: location?.directory ?? process.cwd(),
-    })
+    const root = location?.directory ?? process.cwd()
 
     const [tasks, setTasks] = createSignal(await loadConductorTasks(root))
     let refreshGeneration = 0
@@ -94,9 +69,7 @@ export default Plugin.define({
     }
 
     const stopEvents = context.data.listen(({ details }) => {
-      if (details.type !== "file.watcher.updated" && details.type !== "file.edited") return
-      const file = eventFile(details)
-      if (file && isConductorTasksPath(file)) void refresh()
+      if (details.type === "filesystem.changed") void refresh()
     })
 
     const stopSlot = context.ui.slot({
