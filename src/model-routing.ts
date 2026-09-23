@@ -123,9 +123,16 @@ export type AvailableModel = {
   outputCost?: number
 }
 
-export function normalizeAvailableModels(values: readonly unknown[]): AvailableModel[] {
+function modelListItems(input: unknown): readonly unknown[] {
+  if (Array.isArray(input)) return input
+  if (!input || typeof input !== "object") return []
+  const data = (input as Record<string, unknown>).data
+  return Array.isArray(data) ? data : []
+}
+
+export function normalizeAvailableModels(input: unknown): AvailableModel[] {
   const result: AvailableModel[] = []
-  for (const value of values) {
+  for (const value of modelListItems(input)) {
     if (!value || typeof value !== "object") continue
     const item = value as Record<string, any>
     const providerID = typeof item.providerID === "string" ? item.providerID : undefined
