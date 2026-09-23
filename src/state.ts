@@ -39,6 +39,10 @@ export function stateDir(root: string): string {
   return join(root, STATE_DIR_NAME)
 }
 
+export async function hasConductorState(root: string): Promise<boolean> {
+  return exists(stateDir(root))
+}
+
 export function isTrivialPrompt(prompt: string): boolean {
   const text = prompt.trim().toLowerCase().replace(/\s+/g, " ")
   if (!text) return true
