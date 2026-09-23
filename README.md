@@ -36,6 +36,29 @@ The first meaningful root-session prompt creates:
 
 This state contract intentionally remains close to Codex Conductor so project skills can share the same concepts.
 
+## Task sidebar
+
+`.conductor/tasks.json` is the single source of truth for project tasks. Conductor does **not** mirror those tasks through OpenCode's `todowrite` tool or keep a second session todo list.
+
+The package ships a separate TUI entrypoint that reads `tasks.json` directly and renders the current Conductor graph in OpenCode's normal sidebar content area. The view refreshes on OpenCode file-edit/file-watcher events and works across sessions because the source is project state, not session state.
+
+Status mapping:
+
+```text
+✓ done / completed
+● in_progress / active
+○ ready / selected
+⊘ blocked
+? waiting_for_user
+! failed
+· proposed / pending
+– skipped / cancelled
+```
+
+Blocked items can show their dependency IDs and user-decision waits are called out explicitly. The sidebar favors actionable tasks and caps the visible list so long-lived projects do not flood the UI.
+
+While Conductor is active, native `todowrite`/`todoread` are removed from the root and worker model-visible tool sets to avoid duplicate task state.
+
 ## Blocking decisions
 
 When a missing product decision, preference, requirement, approval, or scope choice changes the result:
@@ -91,6 +114,8 @@ After the initial runtime lands on `main`, the stable Git install becomes:
 opencode plugin add github:s3tupw1zard/opencode-conductor
 ```
 
+The package exposes separate `./server` and `./tui` entrypoints, so one plugin install can activate the orchestration runtime and the Conductor sidebar without duplicating task state.
+
 Check installed plugins with:
 
 ```bash
@@ -98,14 +123,7 @@ opencode plugin list
 opencode plugin check
 ```
 
-For a project-local development checkout you can instead reference the package from `opencode.jsonc`:
-
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["../opencode-conductor"]
-}
-```
+For a project-local development checkout you can instead reference the package from OpenCode's plugin configuration.
 
 ## Development
 
@@ -119,8 +137,8 @@ See [`docs/live-test.md`](docs/live-test.md) for the acceptance test.
 
 ## Current status
 
-`0.1.0` is the initial OpenCode port. The first live acceptance target is:
+`0.1.1` adds the direct Conductor task sidebar on top of the initial OpenCode port. The live acceptance target is:
 
-**root → one worker → worker needs decision → root native question UI → user answer → same worker resumes → persistent state updated**.
+**root → one worker → worker needs decision → root native question UI → user answer → same worker resumes → persistent state updated → task graph visible directly in the OpenCode sidebar**.
 
 Codex Conductor remains a separate project; this repository does not replace or modify it.
