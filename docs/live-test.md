@@ -1,6 +1,6 @@
 # OpenCode Conductor live acceptance test
 
-This test is deliberately designed to exercise the parts that were awkward in Codex: native blocking questions, root-only interaction, one worker, worker-to-root decision handoff, same-worker resume, and persistent project state.
+This test is deliberately designed to exercise native blocking questions, root-only interaction, one worker, worker-to-root decision handoff, same-worker resume, persistent project state, and the direct Conductor task sidebar.
 
 ## 1. Install the development build
 
@@ -44,7 +44,34 @@ Example answers:
 - `next`: priority descending, creation time ascending, then ID.
 - Zusatz: archived tasks must never appear in `next`; user-facing validation messages should be understandable.
 
-## 4. Worker handoff
+## 4. Direct task sidebar
+
+As soon as `.conductor/tasks.json` contains tasks, the normal OpenCode session sidebar should show a `Conductor` block without any `todowrite` tool call.
+
+Expected status symbols:
+
+```text
+✓ done / completed
+● in_progress / active
+○ ready / selected
+⊘ blocked
+? waiting_for_user
+! failed
+· proposed / pending
+– skipped / cancelled
+```
+
+Expected behavior:
+
+- `.conductor/tasks.json` is the only task source.
+- The root model does not receive `todowrite` or `todoread` while Conductor is active.
+- Updating `tasks.json` refreshes the sidebar via file events.
+- blocked tasks may show dependency IDs below the task.
+- waiting-for-user tasks are visibly marked as waiting on a user decision.
+- long task graphs are capped in the sidebar and report how many tasks are omitted.
+- no separate native Todo list should appear unless another plugin or external action deliberately populates OpenCode session todos.
+
+## 5. Worker handoff
 
 When the later `done` rule becomes relevant, the worker must NOT open its own form.
 
@@ -62,7 +89,7 @@ user answer
 same worker resumes
 ```
 
-A child session should not have `question` or `subagent` in its model-visible tools. The plugin also denies those actions through the permission hook.
+A child session should not have `question`, `subagent`, `todowrite`, or `todoread` in its model-visible tools. The plugin also denies protected worker actions through the permission hook.
 
 Suggested answer for the delayed decision:
 
@@ -70,7 +97,7 @@ Suggested answer for the delayed decision:
 
 Fail the test if the user needs to navigate into the worker session to answer.
 
-## 5. Persistent state
+## 6. Persistent state
 
 Inspect:
 
@@ -90,23 +117,23 @@ Expected properties:
 - no worker edits `.conductor/` directly;
 - `active_worker_session_id` is used while a worker needs to be resumed and cleared after integration.
 
-## 6. Resume test
+## 7. Resume test
 
 Close OpenCode completely, reopen the same repository, and ask:
 
 > Wo stehen wir gerade?
 
-The root session should receive the `.conductor/` snapshot and describe phase, active/ready/blocked tasks, unresolved decisions, and worker resume state without needing the old chat transcript.
+The root session should receive the `.conductor/` snapshot and describe phase, active/ready/blocked tasks, unresolved decisions, and worker resume state without needing the old chat transcript. The Conductor sidebar should also repopulate directly from `tasks.json`.
 
-## 7. Existing-project change test
+## 8. Existing-project change test
 
 Ask:
 
 > Ergänze einen Befehl blocked, der alle aktuell nicht bearbeitbaren Aufgaben und ihre offenen Abhängigkeiten anzeigt.
 
-Expected: extend the existing task graph and preserve previous decisions instead of starting project planning from scratch.
+Expected: extend the existing task graph and preserve previous decisions instead of starting project planning from scratch. The sidebar should reflect the changed graph.
 
-## 8. Triviality test
+## 9. Triviality test
 
 Ask:
 
@@ -118,4 +145,4 @@ Expected: perform the tiny edit without creating a large orchestration plan.
 
 The port is usable when this full cycle works reliably:
 
-**root → one foreground worker → worker question → root native form → user answer → same worker → result → state update → clean resume after restart**.
+**root → one foreground worker → worker question → root native form → user answer → same worker → result → state update → direct sidebar projection → clean resume after restart**.
