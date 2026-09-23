@@ -1,0 +1,35 @@
+{
+  "name": "opencode-conductor",
+  "version": "0.1.0",
+  "description": "Persistent project-state, blocking-decision and single-worker orchestration for OpenCode.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "latest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "opencode",
+    "orchestration",
+    "task-management",
+    "decision-gates",
+    "subagent"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s3tupw1zard/opencode-conductor.git"
+  }
+}
