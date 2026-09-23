@@ -1,10 +1,13 @@
 {
   "name": "opencode-conductor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Persistent project-state, blocking-decision and single-worker orchestration for OpenCode.",
   "type": "module",
+  "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./server": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -13,9 +16,15 @@
   "dependencies": {
     "@opencode/plugin": "latest"
   },
+  "peerDependencies": {
+    "@opentui/solid": ">=0.4.5",
+    "solid-js": ">=1.9.0"
+  },
   "devDependencies": {
+    "@opentui/solid": "latest",
     "@types/bun": "latest",
     "@types/node": "latest",
+    "solid-js": "latest",
     "typescript": "latest"
   },
   "engines": {
